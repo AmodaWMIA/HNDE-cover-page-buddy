@@ -65,31 +65,26 @@
     line-height: 1.2;
   }
 
-  /*
-    Center title: use native CSS text-decoration for per-line underlines.
-    text-decoration will underline each line individually and match the line length.
-    We control thickness and offset with text-decoration-thickness and text-underline-offset.
-  */
+  /* Center title using per-line underlines (text-decoration) */
   .center-title {
     position: relative;
     left: 50%;
     transform: translate(-50%,-50%);
     top: calc(10mm + 90mm);
     font-size: 39px;
-    text-align: center;             /* center text on each line */
+    text-align: center;
     line-height: 1.4;
     padding: 0 5mm;
-    display: inline-block;          /* shrink to content width (longest line) and let it wrap */
-    width: auto;                    /* don't force full width */
-    white-space: normal;            /* allow wrapping */
+    display: inline-block;
+    width: auto;
+    white-space: normal;
     box-sizing: border-box;
-    /* per-line underline settings */
     text-decoration-line: underline;
     text-decoration-color: #000;
     text-decoration-style: solid;
-    text-decoration-thickness: 3px; /* desktop thickness */
-    text-underline-offset: 8px;     /* desktop offset (distance from text to underline) */
-    text-decoration-skip-ink: none; /* ensure straight underlines */
+    text-decoration-thickness: 3px;
+    text-underline-offset: 8px;
+    text-decoration-skip-ink: none;
   }
 
   .middle-left {
@@ -187,7 +182,6 @@
       padding: 0 6mm;
       display: inline-block;
       width: auto;
-      /* mobile underline: thinner and closer to text */
       text-decoration-thickness: 2px;
       text-underline-offset: 6px;
     }
@@ -210,6 +204,25 @@
       font-size: 14px;
       bottom: auto;
     }
+  }
+
+  /*
+    Overrides used only while preparing the element for PDF export.
+    We toggle "pdf-export" on <body> during export so responsive rules won't shrink/flow the A4 preview.
+    The !important flags ensure these values win over the media query rules.
+  */
+  body.pdf-export .page {
+    width: 210mm !important;
+    height: 297mm !important;
+    transform: none !important;
+    margin: 0 auto !important;
+  }
+  body.pdf-export .page-inner {
+    position: absolute !important;
+    left: 25mm !important;
+    top: 10mm !important;
+    right: 10mm !important;
+    bottom: 10mm !important;
   }
 </style>
 </head>
@@ -299,17 +312,54 @@ document.querySelectorAll('#form input, #form textarea, #form select')
 
 updatePreview();
 
+/*
+  Download PDF in exact A4:
+
+  Strategy:
+  - Temporarily add a "pdf-export" class to <body> to force desktop A4 styles even on small screens.
+  - Measure the page element width in pixels (after forcing A4) and pass that to html2canvas so canvas renders at the expected size.
+  - Use jsPDF format 'a4' with unit 'mm' to create the pdf with correct dimensions.
+  - After saving, remove the temporary class to restore the responsive preview.
+*/
 document.getElementById('downloadPDF').addEventListener('click', async () => {
   updatePreview();
-  const element = document.getElementById('pagePreview');
+
+  const pageEl = document.getElementById('pagePreview');
+
+  // 1) Add class to force desktop/A4 styles
+  document.body.classList.add('pdf-export');
+
+  // Allow the browser to apply styles/layout changes before measuring
+  await new Promise(requestAnimationFrame);
+
+  // 2) Measure width in pixels of the A4-styled element
+  const pxWidth = Math.ceil(pageEl.getBoundingClientRect().width);
+  const pxHeight = Math.ceil(pageEl.getBoundingClientRect().height);
+
+  // 3) Prepare html2pdf options - use a reasonably high scale for clarity (2)
   const opt = {
     margin: 0,
     filename: 'cover_page.pdf',
     image: { type: 'jpeg', quality: 1 },
-    html2canvas: { scale: 2 },
+    html2canvas: {
+      scale: 2,
+      width: pxWidth,
+      height: pxHeight,
+      windowWidth: pxWidth
+    },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
-  await html2pdf().set(opt).from(element).save();
+
+  try {
+    // generate and save
+    await html2pdf().set(opt).from(pageEl).save();
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    alert('PDF generation failed. See console for details.');
+  } finally {
+    // 4) Clean up - remove class so UI returns to normal
+    document.body.classList.remove('pdf-export');
+  }
 });
 
 document.getElementById('downloadDOCX').addEventListener('click', async () => {

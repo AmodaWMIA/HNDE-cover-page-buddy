@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Cover Page Generator</title>
 <style>
+  /* Prevent mobile browsers from auto-resizing text (can break measurements) */
   html, body {
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
     height: 100%;
     margin: 0;
     font-family:'Times New Roman', Times, serif;
@@ -13,11 +16,7 @@
     text-transform: uppercase;
   }
 
-  .app {
-    max-width: 980px;
-    margin: 8px auto;
-    padding: 8px;
-  }
+  .app {max-width: 980px;margin: 8px auto;padding: 8px;}
 
   /* Desktop: render as A4 box for PDF and print */
   .page {
@@ -52,23 +51,13 @@
     transform: translateX(-50%); /* center horizontally */
   }
 
-  .top-right {
-    top: 5mm;
-    font-size: 25px;
-    line-height: 1.3;
-    padding-bottom: 2mm;
-  }
-
-  .bottom-right {
-    bottom: 5mm;
-    font-size: 15px;
-    line-height: 1.2;
-  }
+  .top-right {top: 5mm;font-size: 25px;line-height: 1.3;padding-bottom: 2mm;}
+  .bottom-right {bottom: 5mm;font-size: 15px;line-height: 1.2;}
 
   /*
-    Per-line underlines implemented by wrapping each visual line in a .line element
-    and applying border-bottom + padding-bottom to create a consistent offset. This
-    approach is robust across browsers and renders correctly in html2canvas/jsPDF.
+    Center title rendering:
+    - We'll render every visual line inside a .line element and apply border-bottom + padding-bottom.
+    - This ensures the underline is a real DOM border and the offset is consistent across browsers and captured reliably by html2canvas.
   */
   .center-title {
     position: relative;
@@ -85,17 +74,15 @@
     box-sizing: border-box;
   }
 
-  /* Per-line wrapper — underline and offset controlled here */
   .center-title .line {
     display: inline-block;            /* shrink to the line width */
     border-bottom: 3px solid #000;    /* underline thickness (desktop) */
     padding-bottom: 8px;              /* offset between text and underline */
     box-sizing: border-box;
     white-space: normal;
-    margin-right: .2em;               /* small gap between lines when centered */
+    margin-right: .2em;
   }
 
-  /* Word-level spans preserve spacing and prevent collapsing */
   .center-title .word {
     display: inline-block;
     margin-right: .25em;
@@ -118,114 +105,32 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   }
 
-  .form label {
-    font-size: 14px;
-    display:block;
-    margin-top:8px;
-  }
+  .form label {font-size: 14px;display:block;margin-top:8px;}
 
   .form input[type="text"], .form textarea, .form select, .form input[type="date"] {
-    width:100%;
-    padding:8px;
-    box-sizing:border-box;
-    font-family: 'Times New Roman', Times, serif;
-    text-transform:uppercase;
-    margin-top:6px;
-    font-size:14px;
+    width:100%;padding:8px;box-sizing:border-box;font-family: 'Times New Roman', Times, serif;
+    text-transform:uppercase;margin-top:6px;font-size:14px;
   }
 
-  .btn{
-    display:block;
-    width:100%;
-    padding:12px;
-    margin-top:10px;
-    background:#00e676;
-    color:#222;
-    border-radius:8px;
-    font-size:16px;
-    cursor: pointer;
-    text-align: center;
-  }
+  .btn{display:block;width:100%;padding:12px;margin-top:10px;background:#00e676;color:#222;border-radius:8px;font-size:16px;cursor:pointer;text-align:center;}
 
-  .top-right td:last-child {
-    text-align: left;
-    padding-right: 2mm;
-  }
+  .top-right td:last-child {text-align:left;padding-right:2mm;}
 
   /* Mobile / small screens: flow layout so preview is readable and interactive */
   @media (max-width: 768px) {
-    .page {
-      width: 100%;
-      height: auto;
-      transform: none;
-      margin: 0 auto 12px;
-      padding: 8px 0;
-    }
-
-    /* make inner content flow vertically for mobile */
-    .page-inner {
-      position: relative;
-      left: auto;
-      top: auto;
-      right: auto;
-      bottom: auto;
-      margin: 8px;
-      padding: 10px;
-      border: 1px solid #000;
-      box-sizing: border-box;
-    }
-
-    .top-right {
-      position: relative;
-      left: auto;
-      transform: none;
-      text-align: center;
-      border-bottom: 2px solid #000;
-      padding-bottom: 6px;
-      font-size: 18px;
-      margin-bottom: 8px;
-    }
-
-    .center-title {
-      position: relative;
-      left: auto;
-      transform: none;
-      top: auto;
-      margin: 12px auto;
-      font-size: 26px;
-      padding: 0 6mm;
-      display: block;
-    }
-
-    .center-title .line {
-      border-bottom-width: 2px;
-      padding-bottom: 6px;
-    }
-
-    .middle-left {
-      position: relative;
-      left: auto;
-      top: auto;
-      margin-top: 12px;
-      font-size: 15px;
-      white-space: pre-line;
-    }
-
-    .bottom-right {
-      position: relative;
-      left: auto;
-      transform: none;
-      text-align: center;
-      margin-top: 10px;
-      font-size: 14px;
-      bottom: auto;
-    }
+    .page {width: 100%;height: auto;transform: none;margin: 0 auto 12px;padding: 8px 0;}
+    .page-inner {position: relative;left: auto;top: auto;right: auto;bottom: auto;margin: 8px;padding: 10px;border: 1px solid #000;box-sizing: border-box;}
+    .top-right {position: relative;left: auto;transform: none;text-align: center;border-bottom: 2px solid #000;padding-bottom: 6px;font-size: 18px;margin-bottom: 8px;}
+    .center-title {position: relative;left: auto;transform: none;top: auto;margin: 12px auto;font-size: 26px;padding: 0 6mm;display: block;}
+    .center-title .line {border-bottom-width: 2px;padding-bottom: 6px;}
+    .middle-left {position: relative;left: auto;top: auto;margin-top: 12px;font-size: 15px;white-space: pre-line;}
+    .bottom-right {position: relative;left: auto;transform: none;text-align: center;margin-top: 10px;font-size: 14px;bottom: auto;}
   }
 
   /*
-    Overrides used only while preparing the element for PDF export.
-    We toggle "pdf-export" on <body> during export so responsive rules won't shrink/flow the A4 preview.
-    The !important flags ensure these values win over the media query rules.
+    PDF export overrides — added to ensure desktop A4 underlines/offsets are enforced
+    even when the page is viewed on a small mobile viewport. This fixes cases where
+    media queries or mobile browser text autosizing interfere with measurements.
   */
   body.pdf-export .page {
     width: 210mm !important;
@@ -239,6 +144,18 @@
     top: 10mm !important;
     right: 10mm !important;
     bottom: 10mm !important;
+  }
+  /* Force center-title desktop sizing during export */
+  body.pdf-export .center-title {
+    font-size: 39px !important;
+    top: calc(10mm + 90mm) !important;
+    padding: 0 5mm !important;
+  }
+  /* Ensure per-line underline thickness and offset are the desktop values in the export */
+  body.pdf-export .center-title .line {
+    border-bottom: 3px solid #000 !important;
+    padding-bottom: 8px !important;
+    display: inline-block !important;
   }
 </style>
 </head>
@@ -281,91 +198,68 @@
 <script>
 const el = id => document.getElementById(id);
 
-/* Render the center title as per-line wrapped blocks with per-line underline.
-   Approach:
-   - Store raw title text in data-raw on the element.
-   - Create inline word spans, measure their offsetTop to determine visual lines,
-     then rebuild the DOM grouping words that share the same offsetTop into a
-     .line wrapper which receives the border-bottom (underline) + padding (offset).
-   This produces an underline per wrapped line that matches line length and is
-   robust across browsers and export tools.
+/* Break the title into measured visual lines and wrap each line in .line so
+   border-bottom (underline) + padding-bottom provide a consistent offset in PDF.
 */
 function renderTitleLines(forceRaw) {
   const titleEl = el('centerTitle');
   const raw = (forceRaw !== undefined ? forceRaw : titleEl.dataset.raw) || '';
   titleEl.dataset.raw = raw;
-
   titleEl.innerHTML = '';
   if (!raw) return;
 
-  // Create word spans (so we can measure their layout)
-  const words = raw.split(/(\s+)/); // keep spaces tokens so we can preserve spacing
-  const tempFrag = document.createDocumentFragment();
+  // Build initial word spans (preserve spaces)
+  const words = raw.split(/(\s+)/);
+  const frag = document.createDocumentFragment();
   words.forEach(token => {
     if (/\s+/.test(token)) {
-      // spaces - add a regular text node (keeps spacing before measuring)
-      tempFrag.appendChild(document.createTextNode(token));
+      frag.appendChild(document.createTextNode(token));
     } else {
       const w = document.createElement('span');
       w.className = 'word';
       w.textContent = token;
-      tempFrag.appendChild(w);
+      frag.appendChild(w);
     }
   });
-  titleEl.appendChild(tempFrag);
+  titleEl.appendChild(frag);
 
-  // Force layout then capture each word's offsetTop
-  // Words and text nodes are mixed; we want only .word elements
+  // Collect .word elements and their offsetTop
   const wordEls = Array.from(titleEl.querySelectorAll('.word'));
   if (wordEls.length === 0) return;
-
-  // Collect tops
   const items = wordEls.map(w => ({ el: w, top: w.offsetTop }));
 
-  // Group words that share same top (same visual line)
+  // Group by top offset (visual lines)
   const groups = [];
   items.forEach(item => {
     const last = groups[groups.length - 1];
-    if (!last || Math.abs(last.top - item.top) > 2) { // threshold to detect new line
+    if (!last || Math.abs(last.top - item.top) > 2) {
       groups.push({ top: item.top, words: [item.el] });
     } else {
       last.words.push(item.el);
     }
   });
 
-  // Rebuild title DOM: clear and append line wrappers with words and proper spacing
+  // Rebuild DOM with .line wrappers
   titleEl.innerHTML = '';
   groups.forEach((g, gi) => {
     const line = document.createElement('span');
     line.className = 'line';
-    // Append words and restore spaces between them
     g.words.forEach((w, wi) => {
-      line.appendChild(w); // moves the node
-      // Add a normal text node space after each word except possibly last;
-      // using a single space keeps spacing consistent during wrapping.
+      line.appendChild(w); // moves node
       if (wi < g.words.length - 1) line.appendChild(document.createTextNode(' '));
     });
-    // For visual centering we keep margin on line elements if needed.
     titleEl.appendChild(line);
-    // Add a small inter-line spacer for centering; not required but avoids stuck lines
-    if (gi < groups.length - 1) {
-      titleEl.appendChild(document.createTextNode(' '));
-    }
+    if (gi < groups.length - 1) titleEl.appendChild(document.createTextNode(' '));
   });
 }
 
-// Helper: set center title raw text and render lines
 function setCenterTitle(raw) {
   const titleEl = el('centerTitle');
   titleEl.dataset.raw = raw || '';
   renderTitleLines();
 }
 
-function formatDateDDMMYYYY(iso){
-  if(!iso) return '';
-  const [y,m,d] = iso.split('-');
-  return `${d}/${m}/${y}`;
-}
+function formatDateDDMMYYYY(iso){ if(!iso) return ''; const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; }
 
 function updatePreview(){
   el('topRightBlock').innerHTML =
@@ -377,10 +271,7 @@ function updatePreview(){
 
   setCenterTitle(el('expTitle').value);
 
-  const members = el('members').value.split(/\r?\n/)
-    .map(x => x.trim()).filter(Boolean)
-    .map(m => `<tr><td></td><td>${m}</td></tr>`).join('');
-
+  const members = el('members').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean).map(m => `<tr><td></td><td>${m}</td></tr>`).join('');
   el('middleLeftBlock').innerHTML =
     `<table>
       <tr><td>INSTRUCTED BY</td><td>: ${el('instructor').value}</td></tr>
@@ -399,56 +290,45 @@ function updatePreview(){
     </table>`;
 }
 
-// live preview for input/change
-document.querySelectorAll('#form input, #form textarea, #form select')
-  .forEach(inp => {
-    ['input','change','keyup'].forEach(ev => inp.addEventListener(ev, updatePreview));
-  });
-
+// Live preview handlers
+document.querySelectorAll('#form input, #form textarea, #form select').forEach(inp => {
+  ['input','change','keyup'].forEach(ev => inp.addEventListener(ev, updatePreview));
+});
 updatePreview();
 
-// Also re-render title lines on window resize to handle layout changes
+// Re-render line wrapping on resize (layout changes)
 let resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    // re-render using stored raw
-    renderTitleLines();
-  }, 80);
+  resizeTimer = setTimeout(() => renderTitleLines(), 80);
 });
 
 /*
-  Download PDF in exact A4:
-
-  Strategy:
-  - Temporarily add a "pdf-export" class to <body> to force A4 styles even on small screens.
-  - Re-render per-line underlines after forcing A4 so line breaks match the exported layout.
-  - Measure the page element width/height in pixels and pass those to html2canvas options.
-  - Use jsPDF format 'a4' to produce a true A4 PDF.
+  PDF export:
+  - Add body.pdf-export to force desktop/A4 CSS (including underline offsets)
+  - Re-render title lines under the forced layout
+  - Wait animation frames to ensure measurement is correct
+  - Measure pixel width/height and pass to html2canvas
 */
 document.getElementById('downloadPDF').addEventListener('click', async () => {
   updatePreview();
-
   const pageEl = document.getElementById('pagePreview');
 
-  // 1) Add class to force desktop/A4 styles
   document.body.classList.add('pdf-export');
 
-  // Allow the browser to apply styles/layout changes before measuring
+  // Wait a frame for styles to apply
   await new Promise(requestAnimationFrame);
 
-  // 1b) Re-render title lines for the A4 layout (so per-line underlines match)
+  // Re-render title lines now that A4 styles are applied so lines/underlines match exported layout
   renderTitleLines();
 
-  // Wait another frame so the re-rendered DOM finalizes layout
+  // Wait another frame for final layout
   await new Promise(requestAnimationFrame);
 
-  // 2) Measure width/height in pixels of the A4-styled element
   const rect = pageEl.getBoundingClientRect();
   const pxWidth = Math.ceil(rect.width);
   const pxHeight = Math.ceil(rect.height);
 
-  // 3) Prepare html2pdf options - use a reasonably high scale for clarity (2)
   const opt = {
     margin: 0,
     filename: 'cover_page.pdf',
@@ -463,15 +343,13 @@ document.getElementById('downloadPDF').addEventListener('click', async () => {
   };
 
   try {
-    // generate and save
     await html2pdf().set(opt).from(pageEl).save();
   } catch (err) {
     console.error('PDF generation failed:', err);
     alert('PDF generation failed. See console for details.');
   } finally {
-    // 4) Clean up - remove class so UI returns to normal and re-render preview
+    // restore preview and re-render under normal responsive rules
     document.body.classList.remove('pdf-export');
-    // Re-render using current raw text to restore preview under normal responsive rules
     await new Promise(requestAnimationFrame);
     renderTitleLines();
   }
@@ -479,12 +357,7 @@ document.getElementById('downloadPDF').addEventListener('click', async () => {
 
 document.getElementById('downloadDOCX').addEventListener('click', async () => {
   const doc = new docx.Document({
-    sections: [{
-      children: [ new docx.Paragraph({
-        text: document.getElementById('pageInner').innerText,
-        spacing: { after: 200 }
-      }) ]
-    }]
+    sections: [{ children: [ new docx.Paragraph({ text: document.getElementById('pageInner').innerText, spacing: { after: 200 } }) ] }]
   });
   docx.Packer.toBlob(doc).then(blob => {
     const a = document.createElement('a');

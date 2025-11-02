@@ -65,7 +65,11 @@
     line-height: 1.2;
   }
 
-  /* Center title using per-line underlines (text-decoration) */
+  /*
+    Per-line underlines implemented by wrapping each visual line in a .line element
+    and applying border-bottom + padding-bottom to create a consistent offset. This
+    approach is robust across browsers and renders correctly in html2canvas/jsPDF.
+  */
   .center-title {
     position: relative;
     left: 50%;
@@ -75,16 +79,26 @@
     text-align: center;
     line-height: 1.4;
     padding: 0 5mm;
-    display: inline-block;
+    display: block;
     width: auto;
     white-space: normal;
     box-sizing: border-box;
-    text-decoration-line: underline;
-    text-decoration-color: #000;
-    text-decoration-style: solid;
-    text-decoration-thickness: 3px;
-    text-underline-offset: 8px;
-    text-decoration-skip-ink: none;
+  }
+
+  /* Per-line wrapper — underline and offset controlled here */
+  .center-title .line {
+    display: inline-block;            /* shrink to the line width */
+    border-bottom: 3px solid #000;    /* underline thickness (desktop) */
+    padding-bottom: 8px;              /* offset between text and underline */
+    box-sizing: border-box;
+    white-space: normal;
+    margin-right: .2em;               /* small gap between lines when centered */
+  }
+
+  /* Word-level spans preserve spacing and prevent collapsing */
+  .center-title .word {
+    display: inline-block;
+    margin-right: .25em;
   }
 
   .middle-left {
@@ -180,10 +194,12 @@
       margin: 12px auto;
       font-size: 26px;
       padding: 0 6mm;
-      display: inline-block;
-      width: auto;
-      text-decoration-thickness: 2px;
-      text-underline-offset: 6px;
+      display: block;
+    }
+
+    .center-title .line {
+      border-bottom-width: 2px;
+      padding-bottom: 6px;
     }
 
     .middle-left {
@@ -232,7 +248,7 @@
   <div class="page" id="pagePreview">
     <div class="page-inner" id="pageInner">
       <div class="top-right" id="topRightBlock"></div>
-      <div class="center-title" id="centerTitle"></div>
+      <div class="center-title" id="centerTitle" aria-live="polite" data-raw=""></div>
       <div class="middle-left" id="middleLeftBlock"></div>
       <div class="bottom-right" id="bottomRightBlock"></div>
     </div>
@@ -265,6 +281,86 @@
 <script>
 const el = id => document.getElementById(id);
 
+/* Render the center title as per-line wrapped blocks with per-line underline.
+   Approach:
+   - Store raw title text in data-raw on the element.
+   - Create inline word spans, measure their offsetTop to determine visual lines,
+     then rebuild the DOM grouping words that share the same offsetTop into a
+     .line wrapper which receives the border-bottom (underline) + padding (offset).
+   This produces an underline per wrapped line that matches line length and is
+   robust across browsers and export tools.
+*/
+function renderTitleLines(forceRaw) {
+  const titleEl = el('centerTitle');
+  const raw = (forceRaw !== undefined ? forceRaw : titleEl.dataset.raw) || '';
+  titleEl.dataset.raw = raw;
+
+  titleEl.innerHTML = '';
+  if (!raw) return;
+
+  // Create word spans (so we can measure their layout)
+  const words = raw.split(/(\s+)/); // keep spaces tokens so we can preserve spacing
+  const tempFrag = document.createDocumentFragment();
+  words.forEach(token => {
+    if (/\s+/.test(token)) {
+      // spaces - add a regular text node (keeps spacing before measuring)
+      tempFrag.appendChild(document.createTextNode(token));
+    } else {
+      const w = document.createElement('span');
+      w.className = 'word';
+      w.textContent = token;
+      tempFrag.appendChild(w);
+    }
+  });
+  titleEl.appendChild(tempFrag);
+
+  // Force layout then capture each word's offsetTop
+  // Words and text nodes are mixed; we want only .word elements
+  const wordEls = Array.from(titleEl.querySelectorAll('.word'));
+  if (wordEls.length === 0) return;
+
+  // Collect tops
+  const items = wordEls.map(w => ({ el: w, top: w.offsetTop }));
+
+  // Group words that share same top (same visual line)
+  const groups = [];
+  items.forEach(item => {
+    const last = groups[groups.length - 1];
+    if (!last || Math.abs(last.top - item.top) > 2) { // threshold to detect new line
+      groups.push({ top: item.top, words: [item.el] });
+    } else {
+      last.words.push(item.el);
+    }
+  });
+
+  // Rebuild title DOM: clear and append line wrappers with words and proper spacing
+  titleEl.innerHTML = '';
+  groups.forEach((g, gi) => {
+    const line = document.createElement('span');
+    line.className = 'line';
+    // Append words and restore spaces between them
+    g.words.forEach((w, wi) => {
+      line.appendChild(w); // moves the node
+      // Add a normal text node space after each word except possibly last;
+      // using a single space keeps spacing consistent during wrapping.
+      if (wi < g.words.length - 1) line.appendChild(document.createTextNode(' '));
+    });
+    // For visual centering we keep margin on line elements if needed.
+    titleEl.appendChild(line);
+    // Add a small inter-line spacer for centering; not required but avoids stuck lines
+    if (gi < groups.length - 1) {
+      titleEl.appendChild(document.createTextNode(' '));
+    }
+  });
+}
+
+// Helper: set center title raw text and render lines
+function setCenterTitle(raw) {
+  const titleEl = el('centerTitle');
+  titleEl.dataset.raw = raw || '';
+  renderTitleLines();
+}
+
 function formatDateDDMMYYYY(iso){
   if(!iso) return '';
   const [y,m,d] = iso.split('-');
@@ -279,8 +375,7 @@ function updatePreview(){
       <tr><td>${el('subjectCode').value}</td></tr>
     </table>`;
 
-  // center title text (per-line underline handled by CSS text-decoration)
-  el('centerTitle').textContent = el('expTitle').value;
+  setCenterTitle(el('expTitle').value);
 
   const members = el('members').value.split(/\r?\n/)
     .map(x => x.trim()).filter(Boolean)
@@ -312,14 +407,24 @@ document.querySelectorAll('#form input, #form textarea, #form select')
 
 updatePreview();
 
+// Also re-render title lines on window resize to handle layout changes
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    // re-render using stored raw
+    renderTitleLines();
+  }, 80);
+});
+
 /*
   Download PDF in exact A4:
 
   Strategy:
-  - Temporarily add a "pdf-export" class to <body> to force desktop A4 styles even on small screens.
-  - Measure the page element width in pixels (after forcing A4) and pass that to html2canvas so canvas renders at the expected size.
-  - Use jsPDF format 'a4' with unit 'mm' to create the pdf with correct dimensions.
-  - After saving, remove the temporary class to restore the responsive preview.
+  - Temporarily add a "pdf-export" class to <body> to force A4 styles even on small screens.
+  - Re-render per-line underlines after forcing A4 so line breaks match the exported layout.
+  - Measure the page element width/height in pixels and pass those to html2canvas options.
+  - Use jsPDF format 'a4' to produce a true A4 PDF.
 */
 document.getElementById('downloadPDF').addEventListener('click', async () => {
   updatePreview();
@@ -332,9 +437,16 @@ document.getElementById('downloadPDF').addEventListener('click', async () => {
   // Allow the browser to apply styles/layout changes before measuring
   await new Promise(requestAnimationFrame);
 
-  // 2) Measure width in pixels of the A4-styled element
-  const pxWidth = Math.ceil(pageEl.getBoundingClientRect().width);
-  const pxHeight = Math.ceil(pageEl.getBoundingClientRect().height);
+  // 1b) Re-render title lines for the A4 layout (so per-line underlines match)
+  renderTitleLines();
+
+  // Wait another frame so the re-rendered DOM finalizes layout
+  await new Promise(requestAnimationFrame);
+
+  // 2) Measure width/height in pixels of the A4-styled element
+  const rect = pageEl.getBoundingClientRect();
+  const pxWidth = Math.ceil(rect.width);
+  const pxHeight = Math.ceil(rect.height);
 
   // 3) Prepare html2pdf options - use a reasonably high scale for clarity (2)
   const opt = {
@@ -357,8 +469,11 @@ document.getElementById('downloadPDF').addEventListener('click', async () => {
     console.error('PDF generation failed:', err);
     alert('PDF generation failed. See console for details.');
   } finally {
-    // 4) Clean up - remove class so UI returns to normal
+    // 4) Clean up - remove class so UI returns to normal and re-render preview
     document.body.classList.remove('pdf-export');
+    // Re-render using current raw text to restore preview under normal responsive rules
+    await new Promise(requestAnimationFrame);
+    renderTitleLines();
   }
 });
 

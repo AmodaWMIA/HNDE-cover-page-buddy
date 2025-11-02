@@ -58,6 +58,8 @@
     Center title rendering:
     - We'll render every visual line inside a .line element and apply border-bottom + padding-bottom.
     - This ensures the underline is a real DOM border and the offset is consistent across browsers and captured reliably by html2canvas.
+    - Improved grouping: build word+trailing-space spans, measure each span's first client rect and group by rounded top relative to the container.
+      This fixes missed lines on mobile browsers and in the generated PDF.
   */
   .center-title {
     position: relative;
@@ -129,7 +131,7 @@
 
   /*
     PDF export overrides — added to ensure desktop A4 underlines/offsets are enforced
-    even when the page is viewed on a small mobile viewport. This fixes cases where
+    even when the page is viewed on a small/mobile viewport. This fixes cases where
     media queries or mobile browser text autosizing interfere with measurements.
   */
   body.pdf-export .page {
@@ -198,8 +200,11 @@
 <script>
 const el = id => document.getElementById(id);
 
-/* Break the title into measured visual lines and wrap each line in .line so
-   border-bottom (underline) + padding-bottom provide a consistent offset in PDF.
+/* Robust per-line underline rendering:
+   - Create spans that contain a word plus any trailing whitespace (so spaces stick to the measured span).
+   - Measure each span's first client rect top (relative to the container) and group by rounded top.
+   - Wrap grouped spans into .line elements that get the underline (border-bottom + padding-bottom).
+   This fixes lines being missed on mobile and during export.
 */
 function renderTitleLines(forceRaw) {
   const titleEl = el('centerTitle');
@@ -208,31 +213,50 @@ function renderTitleLines(forceRaw) {
   titleEl.innerHTML = '';
   if (!raw) return;
 
-  // Build initial word spans (preserve spaces)
-  const words = raw.split(/(\s+)/);
+  // Tokenize into words and whitespace tokens, but combine a word with its following whitespace
+  const tokens = raw.split(/(\s+)/);
   const frag = document.createDocumentFragment();
-  words.forEach(token => {
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === undefined || token === '') continue;
     if (/\s+/.test(token)) {
+      // If there are leading spaces (unlikely at start), append as text node
       frag.appendChild(document.createTextNode(token));
-    } else {
-      const w = document.createElement('span');
-      w.className = 'word';
-      w.textContent = token;
-      frag.appendChild(w);
+      continue;
     }
-  });
+    // token is a word; check if next token is whitespace and attach it to this span
+    let text = token;
+    if (i + 1 < tokens.length && /\s+/.test(tokens[i + 1])) {
+      text += tokens[i + 1];
+      i++; // skip next (space) since we've consumed it
+    }
+    const w = document.createElement('span');
+    w.className = 'word';
+    w.textContent = text;
+    frag.appendChild(w);
+  }
   titleEl.appendChild(frag);
 
-  // Collect .word elements and their offsetTop
+  // measure container top for relative measurements
+  const containerRect = titleEl.getBoundingClientRect();
+
+  // Collect spans and their first rect top (use getClientRects to handle words that might wrap)
   const wordEls = Array.from(titleEl.querySelectorAll('.word'));
   if (wordEls.length === 0) return;
-  const items = wordEls.map(w => ({ el: w, top: w.offsetTop }));
 
-  // Group by top offset (visual lines)
+  const items = wordEls.map(w => {
+    const rects = w.getClientRects();
+    // Use the first client rect's top; this reflects the visual line for the start of the span
+    const r = rects && rects.length ? rects[0] : w.getBoundingClientRect();
+    const top = Math.round(r.top - containerRect.top);
+    return { el: w, top };
+  });
+
+  // Group by top value (rounded) — lines are words sharing the same top
   const groups = [];
   items.forEach(item => {
     const last = groups[groups.length - 1];
-    if (!last || Math.abs(last.top - item.top) > 2) {
+    if (!last || Math.abs(last.top - item.top) > 4) { // tolerance 4px to account for subpixel and zoom
       groups.push({ top: item.top, words: [item.el] });
     } else {
       last.words.push(item.el);
@@ -245,10 +269,11 @@ function renderTitleLines(forceRaw) {
     const line = document.createElement('span');
     line.className = 'line';
     g.words.forEach((w, wi) => {
-      line.appendChild(w); // moves node
-      if (wi < g.words.length - 1) line.appendChild(document.createTextNode(' '));
+      line.appendChild(w); // moves node into line
+      // We included trailing spaces inside the span text, so we don't need extra space nodes
     });
     titleEl.appendChild(line);
+    // add a small text node between lines to preserve inline flow (not visible)
     if (gi < groups.length - 1) titleEl.appendChild(document.createTextNode(' '));
   });
 }
@@ -306,20 +331,21 @@ window.addEventListener('resize', () => {
 /*
   PDF export:
   - Add body.pdf-export to force desktop/A4 CSS (including underline offsets)
-  - Re-render title lines under the forced layout
-  - Wait animation frames to ensure measurement is correct
+  - Re-render per-line underlines after forcing A4 so line breaks match the exported layout.
+  - Wait animation frames to ensure measurement is correct.
   - Measure pixel width/height and pass to html2canvas
 */
 document.getElementById('downloadPDF').addEventListener('click', async () => {
   updatePreview();
   const pageEl = document.getElementById('pagePreview');
 
+  // Force desktop/A4 styles
   document.body.classList.add('pdf-export');
 
   // Wait a frame for styles to apply
   await new Promise(requestAnimationFrame);
 
-  // Re-render title lines now that A4 styles are applied so lines/underlines match exported layout
+  // Re-render title lines now that A4 styles are applied so per-line underlines match exported layout
   renderTitleLines();
 
   // Wait another frame for final layout

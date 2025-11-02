@@ -42,13 +42,16 @@
     box-sizing: border-box;
   }
 
-  /* Blocks positioned inside page-inner */
+  /* Blocks positioned inside page-inner
+     SHIFTED slightly to the RIGHT relative to center: left:55% (5% to the right of 50%).
+  */
   .top-right, .bottom-right {
     position: absolute;
-    left: 50%;
+    left: 55%;
     text-align: left;
     white-space: pre-line;
-    transform: translateX(-50%); /* center horizontally */
+    transform: none;
+    max-width: 40%;
   }
 
   .top-right {top: 5mm;font-size: 25px;line-height: 1.3;padding-bottom: 2mm;}
@@ -56,10 +59,8 @@
 
   /*
     Center title rendering:
-    - We'll render every visual line inside a .line element and apply border-bottom + padding-bottom.
-    - This ensures the underline is a real DOM border and the offset is consistent across browsers and captured reliably by html2canvas.
-    - Improved grouping: build word+trailing-space spans, measure each span's first client rect and group by rounded top relative to the container.
-      This fixes missed lines on mobile browsers and in the generated PDF.
+    - Every visual line is wrapped in .line elements and receives a border-bottom + padding-bottom
+    - This produces per-line underlines that match visual line lengths and export reliably to PDF.
   */
   .center-title {
     position: relative;
@@ -122,17 +123,16 @@
   @media (max-width: 768px) {
     .page {width: 100%;height: auto;transform: none;margin: 0 auto 12px;padding: 8px 0;}
     .page-inner {position: relative;left: auto;top: auto;right: auto;bottom: auto;margin: 8px;padding: 10px;border: 1px solid #000;box-sizing: border-box;}
-    .top-right {position: relative;left: auto;transform: none;text-align: center;border-bottom: 2px solid #000;padding-bottom: 6px;font-size: 18px;margin-bottom: 8px;}
+    /* On mobile we revert top/bottom-right to normal flow and center them for readability */
+    .top-right {position: relative;left: auto;transform: none;text-align: center;border-bottom: 2px solid #000;padding-bottom: 6px;font-size: 18px;margin-bottom: 8px;max-width: none;}
     .center-title {position: relative;left: auto;transform: none;top: auto;margin: 12px auto;font-size: 26px;padding: 0 6mm;display: block;}
     .center-title .line {border-bottom-width: 2px;padding-bottom: 6px;}
     .middle-left {position: relative;left: auto;top: auto;margin-top: 12px;font-size: 15px;white-space: pre-line;}
-    .bottom-right {position: relative;left: auto;transform: none;text-align: center;margin-top: 10px;font-size: 14px;bottom: auto;}
+    .bottom-right {position: relative;left: auto;transform: none;text-align: center;margin-top: 10px;font-size: 14px;bottom: auto;max-width: none;}
   }
 
   /*
-    PDF export overrides — added to ensure desktop A4 underlines/offsets are enforced
-    even when the page is viewed on a small/mobile viewport. This fixes cases where
-    media queries or mobile browser text autosizing interfere with measurements.
+    PDF export overrides — ensure the new left:55% position is applied during export as well
   */
   body.pdf-export .page {
     width: 210mm !important;
@@ -147,13 +147,18 @@
     right: 10mm !important;
     bottom: 10mm !important;
   }
+  body.pdf-export .top-right,
+  body.pdf-export .bottom-right {
+    left: 55% !important;
+    transform: none !important;
+    max-width: 40% !important;
+  }
   /* Force center-title desktop sizing during export */
   body.pdf-export .center-title {
     font-size: 39px !important;
     top: calc(10mm + 90mm) !important;
     padding: 0 5mm !important;
   }
-  /* Ensure per-line underline thickness and offset are the desktop values in the export */
   body.pdf-export .center-title .line {
     border-bottom: 3px solid #000 !important;
     padding-bottom: 8px !important;
@@ -202,9 +207,8 @@ const el = id => document.getElementById(id);
 
 /* Robust per-line underline rendering:
    - Create spans that contain a word plus any trailing whitespace (so spaces stick to the measured span).
-   - Measure each span's first client rect top (relative to the container) and group by rounded top.
+   - Measure each span's first client rect and group by rounded top relative to container.
    - Wrap grouped spans into .line elements that get the underline (border-bottom + padding-bottom).
-   This fixes lines being missed on mobile and during export.
 */
 function renderTitleLines(forceRaw) {
   const titleEl = el('centerTitle');
@@ -213,22 +217,22 @@ function renderTitleLines(forceRaw) {
   titleEl.innerHTML = '';
   if (!raw) return;
 
-  // Tokenize into words and whitespace tokens, but combine a word with its following whitespace
+  // Tokenize into word + following whitespace tokens
   const tokens = raw.split(/(\s+)/);
   const frag = document.createDocumentFragment();
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     if (token === undefined || token === '') continue;
     if (/\s+/.test(token)) {
-      // If there are leading spaces (unlikely at start), append as text node
+      // leading spaces - add as text node
       frag.appendChild(document.createTextNode(token));
       continue;
     }
-    // token is a word; check if next token is whitespace and attach it to this span
+    // token is a word; attach its following space (if any)
     let text = token;
     if (i + 1 < tokens.length && /\s+/.test(tokens[i + 1])) {
       text += tokens[i + 1];
-      i++; // skip next (space) since we've consumed it
+      i++;
     }
     const w = document.createElement('span');
     w.className = 'word';
@@ -237,26 +241,25 @@ function renderTitleLines(forceRaw) {
   }
   titleEl.appendChild(frag);
 
-  // measure container top for relative measurements
+  // measure container top for relative calculations
   const containerRect = titleEl.getBoundingClientRect();
 
-  // Collect spans and their first rect top (use getClientRects to handle words that might wrap)
+  // Collect spans and their first client rect top (handles wrapped spans)
   const wordEls = Array.from(titleEl.querySelectorAll('.word'));
   if (wordEls.length === 0) return;
 
   const items = wordEls.map(w => {
     const rects = w.getClientRects();
-    // Use the first client rect's top; this reflects the visual line for the start of the span
     const r = rects && rects.length ? rects[0] : w.getBoundingClientRect();
     const top = Math.round(r.top - containerRect.top);
     return { el: w, top };
   });
 
-  // Group by top value (rounded) — lines are words sharing the same top
+  // Group by top value (rounded) — allow small tolerance
   const groups = [];
   items.forEach(item => {
     const last = groups[groups.length - 1];
-    if (!last || Math.abs(last.top - item.top) > 4) { // tolerance 4px to account for subpixel and zoom
+    if (!last || Math.abs(last.top - item.top) > 4) {
       groups.push({ top: item.top, words: [item.el] });
     } else {
       last.words.push(item.el);
@@ -268,12 +271,8 @@ function renderTitleLines(forceRaw) {
   groups.forEach((g, gi) => {
     const line = document.createElement('span');
     line.className = 'line';
-    g.words.forEach((w, wi) => {
-      line.appendChild(w); // moves node into line
-      // We included trailing spaces inside the span text, so we don't need extra space nodes
-    });
+    g.words.forEach(w => line.appendChild(w));
     titleEl.appendChild(line);
-    // add a small text node between lines to preserve inline flow (not visible)
     if (gi < groups.length - 1) titleEl.appendChild(document.createTextNode(' '));
   });
 }
@@ -321,7 +320,7 @@ document.querySelectorAll('#form input, #form textarea, #form select').forEach(i
 });
 updatePreview();
 
-// Re-render line wrapping on resize (layout changes)
+// Re-render line wrapping on resize
 let resizeTimer = null;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
@@ -330,9 +329,8 @@ window.addEventListener('resize', () => {
 
 /*
   PDF export:
-  - Add body.pdf-export to force desktop/A4 CSS (including underline offsets)
+  - Add body.pdf-export to force desktop/A4 CSS
   - Re-render per-line underlines after forcing A4 so line breaks match the exported layout.
-  - Wait animation frames to ensure measurement is correct.
   - Measure pixel width/height and pass to html2canvas
 */
 document.getElementById('downloadPDF').addEventListener('click', async () => {
@@ -345,7 +343,7 @@ document.getElementById('downloadPDF').addEventListener('click', async () => {
   // Wait a frame for styles to apply
   await new Promise(requestAnimationFrame);
 
-  // Re-render title lines now that A4 styles are applied so per-line underlines match exported layout
+  // Re-render title lines under A4 styles
   renderTitleLines();
 
   // Wait another frame for final layout
